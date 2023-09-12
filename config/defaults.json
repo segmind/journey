@@ -1,0 +1,13 @@
+{
+  "folders": {
+    "output": "output",
+    "checkpoints": "data/checkpoints",
+    "loras": "data/loras",
+    "block_pipelines": "data/pipelines"
+  },
+  "values": {
+    "num_inference_steps": 40,
+    "guidance_scale": 5.0,
+    "max_images": 4
+  }
+}
