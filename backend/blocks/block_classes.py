@@ -35,8 +35,18 @@ class SampleBlock(BaseBlock):
 
 
 xl_models = {
+    'base': 'stabilityai/stable-diffusion-xl-base-1.0',
     'DreamshaperXL': 'Lykon/dreamshaper-xl-1-0',
 }
+kandinsky_models = {
+    'base': 'Lykon/dreamshaper-xl-1-0',
+}
+
+model_types = {
+    "XL":xl_models,
+    "Kandinsky":kandinsky_models
+}
+
 @register_class
 class DiffusersXLLoaderBlock(BaseBlock):
 
@@ -44,8 +54,7 @@ class DiffusersXLLoaderBlock(BaseBlock):
 
     def __init__(self):
         super().__init__()
-        self.dropdown('model_select', ["XL", "Kandinsky"])
-        self.dropdown('model_repo', ["base"] + [key for key, _ in xl_models.items()])
+        self.dropdown('model_repo', [key for key, _ in xl_models.items()])
     def fn(self, data: dict) -> dict:
         from backend.diffusers_helpers import load_pipeline
 
@@ -58,8 +67,7 @@ class DiffusersXLLoaderBlock(BaseBlock):
         else:
             model_repo = xl_models[model_repo]
 
-        load_pipeline(selection, model_repo=model_repo)
-        gs.data['models']['base'].unet.set_attn_processor(AttnProcessor2_0())
+        load_pipeline(model_repo=model_repo)
         return data
 
 

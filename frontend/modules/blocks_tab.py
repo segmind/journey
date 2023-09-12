@@ -3,7 +3,8 @@ import streamlit as st
 from backend.blocks.block_ui import initialize, display_sidebar, display_block_with_controls, display_main_button
 from main import singleton as gs
 
-plugin_info = {"name": "ai Blocks"}
+plugin_info = {"name": "ai Blocks",
+               "prio":1}
 
 from backend.blocks.block_classes import *
 
@@ -21,7 +22,7 @@ def run_pipeline(start_index=0):
     return cumulative_data
 
 
-def plugin_tab(tab, tab_names):
+def plugin_tab():
 
     initialize()
 

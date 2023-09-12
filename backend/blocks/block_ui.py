@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 
 from .block_base import save_to_json, load_from_json, AVAILABLE_BLOCKS
 from main import singleton as gs
@@ -17,6 +18,7 @@ import os
 
 def display_sidebar():
     # Sidebar UI
+
     st.sidebar.title("Add Blocks")
     selected_block_name = st.sidebar.selectbox("Choose a block:", [block.__name__ for block in AVAILABLE_BLOCKS])
 
@@ -26,7 +28,7 @@ def display_sidebar():
                                     None)
         if selected_block_class:
             gs.data['added_blocks'].append(selected_block_class())
-
+        st.experimental_rerun()
     # # Button to save current pipeline to default file
     # if st.sidebar.button("Save to JSON"):
     #     save_to_json("pipeline.json")
@@ -49,6 +51,15 @@ def display_sidebar():
 
     global hide
     hide = st.sidebar.checkbox('Hide Buttons')
+
+    # close sidebar
+    js1 = """
+    var clickme = window.parent.document.querySelectorAll("button");
+    clickme[3].click();
+    """
+
+    streamlit_js_eval(js_expressions=js1)
+
 
 def render_widget(widget):
     """Function to render a widget based on its type."""

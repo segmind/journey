@@ -230,66 +230,40 @@ def get_generation_args(selected_values, pipe):
     return args
 
 
-def load_pipeline(model_choice, model_repo=None):
+def load_pipeline(model_repo=None):
 
     print("LOADED:", gs.base_loaded)
     if model_repo == None:
         model_repo = "stabilityai/stable-diffusion-xl-base-1.0"
     if gs.base_loaded != model_repo:
-        if model_choice == "XL":
-            base_pipe = DiffusionPipeline.from_pretrained(
+        try:
+            base_pipe = StableDiffusionXLPipeline.from_pretrained(
                 model_repo, torch_dtype=torch.float16, variant="fp16",
                 use_safetensors=True, device_map='auto'
             )
+        except:
+            base_pipe = StableDiffusionXLPipeline.from_pretrained(
+                model_repo, torch_dtype=torch.float16, device_map='auto'
+            )
 
-            base_pipe.unet.to(memory_format=torch.channels_last)  # in-place operation
-            # base_pipe.vae = AutoencoderTiny.from_pretrained("madebyollin/taesdxl", torch_dtype=torch.float16).to("cuda")
-            lowvram = False
-            if lowvram:
-                base_pipe.enable_model_cpu_offload()
-                base_pipe.enable_vae_slicing()
-                base_pipe.enable_vae_tiling()
-            else:
-                base_pipe.disable_attention_slicing()
+        base_pipe.unet.to(memory_format=torch.channels_last)  # in-place operation
+        lowvram = False
+        if lowvram:
+            base_pipe.enable_model_cpu_offload()
+            base_pipe.enable_vae_slicing()
+            base_pipe.enable_vae_tiling()
+        else:
+            base_pipe.disable_attention_slicing()
 
-            def replace_call(pipe, new_call):
-                def call_with_self(*args, **kwargs):
-                    return new_call(pipe, *args, **kwargs)
+        def replace_call(pipe, new_call):
+            def call_with_self(*args, **kwargs):
+                return new_call(pipe, *args, **kwargs)
 
-                return call_with_self
+            return call_with_self
 
-            base_pipe.generate = replace_call(base_pipe, new_call)
-            gs.data["models"]["base"] = base_pipe
-            print("XL LOADED")
-        elif model_choice == "Kandinsky":
-            pipe = AutoPipelineForText2Image.from_pretrained("kandinsky-community/kandinsky-2-2-decoder",
-                                                             torch_dtype=torch.float16)
-            gs.data["models"]["base"] = pipe
-            print("Kandinsky loaded")
-            model_repo = 'kandinsky'
-        # if 'refiner' not in gs.data['models']:
-        #     from modules.sdjourney_tab import lowvram
-        #
-        #     refiner_pipe = DiffusionPipeline.from_pretrained(
-        #         "stabilityai/stable-diffusion-xl-refiner-1.0",
-        #         # text_encoder_2=gs.data["models"]["base"].text_encoder_2,
-        #         # vae=gs.data["models"]["base"].vae,
-        #         torch_dtype=torch.float16,
-        #         use_safetensors=True,
-        #         variant="fp16",
-        #         device_map='auto'
-        #     )
-        #     if lowvram:
-        #         refiner_pipe.enable_model_cpu_offload()
-        #         refiner_pipe.enable_vae_slicing()
-        #         refiner_pipe.enable_vae_tiling()
-        #     else:
-        #         refiner_pipe.disable_attention_slicing()
-        #     refiner_pipe.unet.to(memory_format=torch.channels_last)  # in-place operation
-        #     gs.data["models"]["refiner"] = refiner_pipe
-        #     print("Refiner Loaded")
-
-
+        base_pipe.generate = replace_call(base_pipe, new_call)
+        gs.data["models"]["base"] = base_pipe
+        print("XL LOADED")
         gs.base_loaded = model_repo
 def load_refiner_pipeline(model_repo=None):
 
@@ -317,11 +291,7 @@ def load_refiner_pipeline(model_repo=None):
         refiner_pipe.unet.to(memory_format=torch.channels_last)  # in-place operation
         gs.data["models"]["refiner"] = refiner_pipe
         print("Refiner Loaded")
-
-
         gs.refiner_loaded = model_repo
-
-
 
 @torch.no_grad()
 def new_call(
