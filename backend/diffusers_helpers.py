@@ -1,11 +1,13 @@
 # Stable Diffusion XL / Midjourney experience
+import secrets
 from enum import Enum
 from diffusers import (DiffusionPipeline, DDIMScheduler, HeunDiscreteScheduler, KDPM2DiscreteScheduler,
                        KDPM2AncestralDiscreteScheduler,
                        LMSDiscreteScheduler, PNDMScheduler, EulerDiscreteScheduler, EulerAncestralDiscreteScheduler,
                        DPMSolverMultistepScheduler,
                        AutoencoderTiny, DPMSolverSinglestepScheduler, StableDiffusionXLPipeline,
-                       StableDiffusionXLImg2ImgPipeline, KandinskyV22CombinedPipeline, AutoPipelineForText2Image)
+                       StableDiffusionXLImg2ImgPipeline, KandinskyV22CombinedPipeline, AutoPipelineForText2Image,
+                       StableDiffusionXLInpaintPipeline)
 from main import singleton as gs
 import gc
 
@@ -202,32 +204,75 @@ def do_not_watermark(image):
     return image
 
 
-def get_generation_args(selected_values, pipe):
 
+def check_args(args, pipe):
+    gen_args = {
+        "prompt": args.get("prompt", "test"),
+        "num_inference_steps": args.get("num_inference_steps", 10)
+    }
 
-
-    args = {"prompt": selected_values['Prompt'],
-            "negative_prompt": selected_values['Negative Prompt'],
-            "num_inference_steps": selected_values['Steps'],
-            "guidance_scale": selected_values['Guidance Scale']}
-
-    if isinstance(pipe, StableDiffusionXLPipeline) or isinstance(pipe, StableDiffusionXLImg2ImgPipeline):
-        args["prompt_2"] = selected_values['Classic Prompt']
-        args["negative_prompt_2"] = selected_values['Classic Negative Prompt']
+    if isinstance(pipe, (StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline)):
+        gen_args["prompt_2"] = args.get('prompt_2')
+        gen_args["negative_prompt_2"] = args.get('negative_prompt_2')
 
     if isinstance(pipe, StableDiffusionXLPipeline):
-        args["width"], args["height"] = aspect_ratios[selected_values['Aspect Ratio']]
-        args["denoising_end"] = selected_values['Mid Point']
-        args["num_images_per_prompt"] = int(selected_values['Count'])
+        gen_args["width"], gen_args["height"] = aspect_ratios.get(args.get('resolution', "1024 x 1024 (1:1 Square)"))
+        gen_args["denoising_end"] = args.get('mid_point', 1.0)
+        gen_args["num_images_per_prompt"] = int(args.get('num_images_per_prompt', 1))
+
     elif isinstance(pipe, StableDiffusionXLImg2ImgPipeline):
-        args["strength"] = selected_values['Strength']
-        args["denoising_start"] = selected_values['Mid Point']
+        gen_args["strength"] = args.get('strength', 0.3)
+        gen_args["denoising_start"] = args.get('mid_point', 0.87)
+        #gen_args["image"] = gs.data.get('latents')
+
     elif isinstance(pipe, KandinskyV22CombinedPipeline):
-        args["width"], args["height"] = aspect_ratios[selected_values['Aspect Ratio']]
-        args["num_images_per_prompt"] = int(selected_values['Count'])
+        gen_args["width"], gen_args["height"] = aspect_ratios.get(args.get('resolution', "1024 x 1024 (1:1 Square)"))
+        gen_args["num_images_per_prompt"] = int(args.get('num_images_per_prompt', 1))
+
+    scheduler = args['scheduler']
+    scheduler_enum = SchedulerType(scheduler)
+    get_scheduler(pipe, scheduler_enum)
 
 
-    return args
+    return gen_args
+
+
+def generate_st(args):
+    import streamlit as st
+    target_device = "cuda"
+    if gs.data["models"]["base"].device.type != target_device:
+        gs.data["models"]["base"].to(target_device)
+
+    gen_args = check_args(args, gs.data["models"]["base"])
+    progressbar = args.get('progressbar', None)
+
+    def callback(i, t, latents):
+        if progressbar:
+            normalized_i = i / args.get('num_inference_steps', 10)
+            progressbar.progress(normalized_i)
+
+    gen_args["callback"] = callback
+
+    if args["show_image"]:
+        if isinstance(gs.data["models"]["base"], StableDiffusionXLPipeline):
+            result = gs.data["models"]["base"].generate(**gen_args)
+            gs.data["latents"] = result[0]
+            result_dict = {"result_image": result[1]}
+            st.session_state.preview = result[1][0]
+
+        else:
+            result_dict = {"result_image": gs.data["models"]["base"](**gen_args).images}
+            gs.data["latents"] = result_dict['result_image']
+            st.session_state.preview = result_dict['result_image'][0]
+    else:
+        gen_args['output_type'] = 'latent'
+        result = gs.data["models"]["base"](**gen_args).images
+        gs.data["latents"] = result
+        result_dict = {}
+    if progressbar:
+        progressbar.progress(1.0)
+
+    return st.session_state.preview
 
 
 def load_pipeline(model_repo=None):
@@ -602,3 +647,37 @@ def new_call(
         self.final_offload_hook.offload()
 
     return (return_latents, image)
+
+
+
+def do_inpaint(prompt, init_image, mask_image, scheduler_type, steps, guidance_scale, strength, seed, selected_repo):
+
+    scheduler = SchedulerType(scheduler_type)
+
+    try:
+        seed = int(seed)
+    except:
+        seed = secrets.randbelow(999999999)
+    if seed == 0:
+        seed = secrets.randbelow(999999999)
+    generator = torch.Generator("cuda").manual_seed(seed)
+    base_pipe = gs.data["models"]["base"]
+    pipe = StableDiffusionXLInpaintPipeline(text_encoder=base_pipe.text_encoder,
+                                             text_encoder_2=base_pipe.text_encoder_2,
+                                             tokenizer=base_pipe.tokenizer,
+                                             tokenizer_2=base_pipe.tokenizer_2,
+                                             unet=base_pipe.unet,
+                                             vae=base_pipe.vae,
+                                             scheduler=base_pipe.scheduler)
+    with torch.inference_mode():
+        get_scheduler(pipe, scheduler)
+        image = pipe(prompt=prompt,
+                     image=init_image,
+                     mask_image=mask_image,
+                     width=init_image.size[0],
+                     height=init_image.size[1],
+                     strength=strength,
+                     guidance_scale=guidance_scale,
+                     num_inference_steps=steps,
+                     generator=generator).images[0]
+    return image

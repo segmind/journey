@@ -21,36 +21,7 @@ def run_pipeline(start_index=0):
         cumulative_data = block.fn(cumulative_data)
     return cumulative_data
 
-
-def plugin_tab():
-
-    initialize()
-
-    # display_sidebar()
-    #
-    # print(tab, tab_names)
-
-    # if tab_names[tab] == "Blocks v2":
-    #     print('were on blocks')
-    col1, col2 = st.columns(2)
-    if "preview_holder" not in st.session_state:
-        with col2:
-            st.session_state.preview_holder = st.empty()
-    form = st.form('blocks')
-    with form:
-        if st.form_submit_button("Run Blocks"):
-            result = run_pipeline()
-
-        #display_main_button(col1)
-        # Display each block with its control buttons
-        for index, block in enumerate(gs.data['added_blocks']):
-            display_block_with_controls(block, index, col1)
-
-    with col2:
-        display_preview()
-
-    st.divider()
-
+def image_history():
     # Determine the number of columns (up to 8)
     num_images = len(st.session_state.images)
     num_columns = min(num_images, 6)
@@ -82,3 +53,34 @@ def plugin_tab():
         if right.button("→") and st.session_state.start_index + num_columns < num_images:
             st.session_state.start_index += 1  # Move the images to the right
 
+
+def plugin_tab():
+
+    initialize()
+
+    # display_sidebar()
+    #
+    # print(tab, tab_names)
+
+    # if tab_names[tab] == "Blocks v2":
+    #     print('were on blocks')
+    col1, col2 = st.columns(2)
+    if "preview_holder" not in st.session_state:
+        with col2:
+            st.session_state.preview_holder = st.empty()
+    form = st.form('blocks')
+    with form:
+        if st.form_submit_button("Run Blocks"):
+            result = run_pipeline()
+
+        #display_main_button(col1)
+        # Display each block with its control buttons
+        for index, block in enumerate(gs.data['added_blocks']):
+            display_block_with_controls(block, index, col1)
+
+    with col2:
+        display_preview()
+
+    st.divider()
+
+    image_history()
